@@ -1,0 +1,35 @@
+# ==============================================================================
+# OpenQuiz - Garage S3 Configuration (v2.4+)
+# ==============================================================================
+# Ultra-lightweight object storage configuration (~25MB RAM footprint)
+# Designed for both single-node and multi-node (3-node Aruba Cloud) Swarm setups.
+# ==============================================================================
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+
+# Single-node default (set to 3 for 3-node distributed clusters in Approach B):
+replication_factor = 1
+
+# RPC port for cluster internal gossip & inter-node communication
+rpc_bind_addr = "[::]:3901"
+rpc_secret_file = "/run/secrets/garage_rpc_secret"
+
+# Allow secrets mounted by Docker Swarm (read-only mode)
+allow_world_readable_secrets = true
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+root_domain = ".s3.garage.localhost"
+
+[s3_web]
+bind_addr = "[::]:3902"
+root_domain = ""
+index = "index.html"
+
+[admin]
+api_bind_addr = "[::]:3903"
+admin_token_file = "/run/secrets/garage_admin_token"
+

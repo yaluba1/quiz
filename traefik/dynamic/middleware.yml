@@ -1,0 +1,38 @@
+# ==============================================================================
+# Traefik Dynamic Configuration: Security, Compression & Rate Limiting
+# ==============================================================================
+
+http:
+  middlewares:
+    # Security Headers (HSTS, Content Type sniffing protection, Frame Options)
+    security-headers:
+      headers:
+        sslRedirect: true
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        forceSTSHeader: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        customFrameOptionsValue: "SAMEORIGIN"
+        referrerPolicy: "strict-origin-when-cross-origin"
+        permissionsPolicy: "camera=(), microphone=(), geolocation=()"
+
+    # Gzip / Brotli Compression
+    compress:
+      compress: {}
+
+    # Rate Limiting for Public Endpoints (DDoS / Brute Force Mitigation)
+    rate-limit-general:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 1s
+
+    # Rate Limiting for Sensitive Endpoints (e.g., Auth, PIN Guessing)
+    rate-limit-auth:
+      rateLimit:
+        average: 10
+        burst: 20
+        period: 1m
+

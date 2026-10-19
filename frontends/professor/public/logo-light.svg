@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 400 100"
+   width="400"
+   height="100"
+   fill="none"
+   version="1.1"
+   id="svg3"
+   sodipodi:docname="logo-light.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs3" />
+  <sodipodi:namedview
+     id="namedview3"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="5.6175"
+     inkscape:cx="200"
+     inkscape:cy="49.933244"
+     inkscape:window-width="2400"
+     inkscape:window-height="1261"
+     inkscape:window-x="-9"
+     inkscape:window-y="-3"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg3" />
+  <style
+     id="style1">
+    .brand-title { fill: #1E293B; }
+  </style>
+  <!-- Brand Icon -->
+  <g
+     transform="translate(15, 10)"
+     id="g2">
+    <!-- Rounded Background Badge -->
+    <rect
+       x="0"
+       y="0"
+       width="80"
+       height="80"
+       rx="20"
+       fill="#93C572"
+       id="rect1" />
+    <!-- Accent Splash -->
+    <path
+       d="M 40 0 C 62 0, 80 18, 80 40 C 80 62, 62 80, 40 80 Z"
+       fill="#7EAC5F"
+       opacity="0.4"
+       id="path1" />
+    <!-- Pumpkin Spark / Star -->
+    <path
+       d="M 40 18 L 47 33 L 62 40 L 47 47 L 40 62 L 33 47 L 18 40 L 33 33 Z"
+       fill="#FF7518"
+       id="path2" />
+    <!-- Playful Question Mark Dot -->
+    <circle
+       cx="40"
+       cy="40"
+       r="6"
+       fill="#FFFFFF"
+       id="circle2" />
+  </g>
+  <!-- Typography: OpenQuiz -->
+  <text
+     x="115"
+     y="56"
+     class="brand-title"
+     fill="#1E293B"
+     font-family="system-ui, '-apple-system', 'Segoe UI', Roboto, sans-serif"
+     font-size="42px"
+     font-weight="900"
+     letter-spacing="-1"
+     id="text2">Open<tspan
+   fill="#ff7518"
+   id="tspan2">Quiz</tspan></text>
+  <!-- Subtitle Tagline -->
+  <text
+     x="142.92212"
+     y="78.712059"
+     font-family="system-ui, '-apple-system', 'Segoe UI', Roboto, sans-serif"
+     font-size="13"
+     font-weight="700"
+     fill="#93c572"
+     letter-spacing="1.5"
+     id="text3"
+     style="font-size:14.6667px">INTERACTIVE FUN</text>
+</svg>
+

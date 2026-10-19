@@ -137,13 +137,66 @@ dist
 !.yarn/sdks
 !.yarn/versions
 
-# Vite files
+# Vite / Vitest files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+vitest.config.ts.timestamp-*
 .vite/
 
 # Astro generated types
 .astro/
 
+# Next.js generated types
+next-env.d.ts
+
 # Turbo Repo
 .turbo
+
+# Secrets (keep templates and .gitkeep only)
+secrets/*
+!secrets/*.example
+!secrets/.gitkeep
+
+# Internal development artifacts & scratch code
+prompts/
+scripts/
+scratch/
+package-lock.json
+
+# Local Docker overrides
+docker-compose.override.yml
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+
+# Editor & IDE files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*~
+*.bak
+
+# Operating System files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+

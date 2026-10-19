@@ -1,0 +1,66 @@
+# ==============================================================================
+# Traefik v3 Static Configuration (Docker Swarm Mode)
+# ==============================================================================
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+# API and Dashboard
+api:
+  dashboard: false
+  insecure: false
+
+# Ping health check endpoint
+ping:
+  entryPoint: "traefik"
+
+# Entry Points (Ports)
+entryPoints:
+  traefik:
+    address: ":8080"
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: "websecure"
+          scheme: "https"
+          permanent: true
+  websecure:
+    address: ":443"
+    http:
+      tls:
+        certResolver: "letsencrypt"
+
+# Providers
+providers:
+  swarm:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: "quiz_public"
+  file:
+    directory: "/etc/traefik/dynamic"
+    watch: true
+
+# Automated TLS via Let's Encrypt
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: "admin@example.com"
+      storage: "/etc/traefik/acme/acme.json"
+      httpChallenge:
+        entryPoint: "web"
+
+# Logging
+log:
+  level: "DEBUG"
+  format: "json"
+
+accessLog:
+  format: "json"
+  bufferingSize: 100
+  filters:
+    statusCodes:
+      - "400-599"
+

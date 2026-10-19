@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary: #93C572;
+  --color-secondary: #FF7518;
+  --color-bg: #F7F9F6;
+  --font-main: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+.dark {
+  --color-bg: #0F172A;
+}
+
+body {
+  background-color: var(--color-bg);
+  font-family: var(--font-main);
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+@media print {
+  body {
+    background-color: white !important;
+    color: black !important;
+  }
+  header, footer, nav, .print\:hidden {
+    display: none !important;
+  }
+}
+

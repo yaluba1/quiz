@@ -1,0 +1,36 @@
+{
+  "name": "@quiz/database",
+  "version": "1.0.0",
+  "description": "Relational persistence, Drizzle schema, migrations, and seed scripts for Open Quiz",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/migrate.ts",
+    "db:seed": "tsx seeds/seed.ts",
+    "db:prune-gdpr": "tsx src/prune-gdpr.ts",
+    "db:studio": "drizzle-kit studio"
+  },
+  "keywords": [
+    "quiz",
+    "postgresql",
+    "drizzle-orm",
+    "migrations"
+  ],
+  "author": "Open Quiz Platform",
+  "license": "GPL-3.0-or-later",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "drizzle-orm": "^0.33.0",
+    "pg": "^8.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@types/pg": "^8.11.6",
+    "drizzle-kit": "^0.24.2",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  }
+}
+
