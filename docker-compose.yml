@@ -1,0 +1,441 @@
+# ==============================================================================
+# Open Quiz Platform - Docker Swarm Stack Definition
+# ==============================================================================
+# Usage:
+#   1. Copy .env.example to .env and configure domain/email.
+#   2. Populate secret files in ./secrets/ (chmod 600)
+#   3. Build local images: docker compose build
+#   4. Deploy stack: docker stack deploy -c docker-compose.yml quiz
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Secrets (Encrypted at rest in Swarm, mounted into /run/secrets/)
+# ------------------------------------------------------------------------------
+secrets:
+  db_user:
+    file: ./secrets/db_user.txt
+  db_password:
+    file: ./secrets/db_password.txt
+  redis_password:
+    file: ./secrets/redis_password.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+  smtp_host:
+    file: ./secrets/smtp_host.txt
+  smtp_port:
+    file: ./secrets/smtp_port.txt
+  smtp_user:
+    file: ./secrets/smtp_user.txt
+  smtp_password:
+    file: ./secrets/smtp_password.txt
+  smtp_from:
+    file: ./secrets/smtp_from.txt
+  garage_rpc_secret:
+    file: ./secrets/garage_rpc_secret.txt
+  garage_admin_token:
+    file: ./secrets/garage_admin_token.txt
+  garage_s3_key_id:
+    file: ./secrets/garage_s3_key_id.txt
+  garage_s3_secret_key:
+    file: ./secrets/garage_s3_secret_key.txt
+
+# ------------------------------------------------------------------------------
+# Networks (Overlay networks for multi-node encryption and service isolation)
+# ------------------------------------------------------------------------------
+networks:
+  # Public ingress network: connects Traefik and exposed web/API services
+  quiz_public:
+    external: true
+
+  # Internal back-tier network: isolated, encrypted, strictly unexposed
+  quiz_internal:
+    external: true
+
+# ------------------------------------------------------------------------------
+# Persistent Volumes
+# ------------------------------------------------------------------------------
+volumes:
+  traefik_acme:
+    driver: local
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  garage_meta:
+    driver: local
+  garage_data:
+    driver: local
+
+# ------------------------------------------------------------------------------
+# Services
+# ------------------------------------------------------------------------------
+services:
+
+  # ----------------------------------------------------------------------------
+  # 1. Reverse Proxy & Gateway (Traefik v3)
+  # ----------------------------------------------------------------------------
+  traefik:
+    image: traefik:latest
+    command:
+      - "--configfile=/etc/traefik/traefik.yml"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@example.com}"
+    ports:
+      - target: 80
+        published: 80
+        mode: host
+      - target: 443
+        published: 443
+        mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - traefik_acme:/etc/traefik/acme
+    networks:
+      - quiz_public
+    environment:
+      - TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL=${ACME_EMAIL:-admin@example.com}
+    deploy:
+      mode: replicated
+      replicas: 1
+      update_config:
+        order: stop-first
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.2'
+          memory: 128M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # ----------------------------------------------------------------------------
+  # 2. Pupil Frontend (Mobile-First Web App)
+  # ----------------------------------------------------------------------------
+  frontend_pupil:
+    image: quiz-frontend-pupil:latest
+    build:
+      context: ./frontends/pupil
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-/api}
+        - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-/}
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://${DOMAIN:-quiz.example.com}/api
+      - NEXT_PUBLIC_WS_URL=https://${DOMAIN:-quiz.example.com}
+    networks:
+      - quiz_public
+    deploy:
+      mode: replicated
+      replicas: 2
+      labels:
+        - "traefik.enable=true"
+        - "traefik.swarm.network=quiz_public"
+        # Route base domain (Landing page & pupil game client)
+        - "traefik.http.routers.pupil.rule=Host(`${DOMAIN:-quiz.example.com}`) || Host(`localhost`) || Host(`127.0.0.1`)"
+        - "traefik.http.routers.pupil.entrypoints=websecure"
+        - "traefik.http.routers.pupil.priority=10"
+        - "traefik.http.routers.pupil.tls=true"
+        - "traefik.http.routers.pupil.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.pupil.middlewares=security-headers@file,compress@file"
+        - "traefik.http.services.pupil.loadbalancer.server.port=3000"
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+      restart_policy:
+        condition: on-failure
+
+  # ----------------------------------------------------------------------------
+  # 3. Professor Frontend (Dashboard & Quiz Creator)
+  # ----------------------------------------------------------------------------
+  frontend_professor:
+    image: quiz-frontend-professor:latest
+    build:
+      context: ./frontends/professor
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-/api}
+        - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-/}
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://${DOMAIN:-quiz.example.com}/api
+      - NEXT_PUBLIC_WS_URL=https://${DOMAIN:-quiz.example.com}
+    networks:
+      - quiz_public
+    deploy:
+      mode: replicated
+      replicas: 2
+      labels:
+        - "traefik.enable=true"
+        - "traefik.swarm.network=quiz_public"
+        # Route professor dashboard under /teacher
+        - "traefik.http.routers.professor.rule=(Host(`${DOMAIN:-quiz.example.com}`) || Host(`localhost`) || Host(`127.0.0.1`)) && PathPrefix(`/teacher`)"
+        - "traefik.http.routers.professor.entrypoints=websecure"
+        - "traefik.http.routers.professor.priority=20"
+        - "traefik.http.routers.professor.tls=true"
+        - "traefik.http.routers.professor.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.professor.middlewares=security-headers@file,compress@file"
+        - "traefik.http.services.professor.loadbalancer.server.port=3000"
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+      restart_policy:
+        condition: on-failure
+
+  # ----------------------------------------------------------------------------
+  # 4. Backend API & WebSocket Game Engine
+  # ----------------------------------------------------------------------------
+  backend:
+    image: quiz-backend:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    secrets:
+      - db_user
+      - db_password
+      - redis_password
+      - jwt_secret
+      - smtp_host
+      - smtp_port
+      - smtp_user
+      - smtp_password
+      - smtp_from
+      - garage_s3_key_id
+      - garage_s3_secret_key
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${POSTGRES_DB:-quiz_db}
+      - DB_USER_FILE=/run/secrets/db_user
+      - DB_PASSWORD_FILE=/run/secrets/db_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD_FILE=/run/secrets/redis_password
+      - JWT_SECRET_FILE=/run/secrets/jwt_secret
+      - SMTP_HOST_FILE=/run/secrets/smtp_host
+      - SMTP_PORT_FILE=/run/secrets/smtp_port
+      - SMTP_USER_FILE=/run/secrets/smtp_user
+      - SMTP_PASSWORD_FILE=/run/secrets/smtp_password
+      - SMTP_FROM_FILE=/run/secrets/smtp_from
+      - S3_ENDPOINT=${S3_ENDPOINT:-http://garage:3900}
+      - S3_BUCKET=${S3_BUCKET:-media}
+      - S3_REGION=${S3_REGION:-garage}
+      - S3_PUBLIC_URL=${S3_PUBLIC_URL:-/media}
+      - S3_ACCESS_KEY_FILE=/run/secrets/garage_s3_key_id
+      - S3_SECRET_KEY_FILE=/run/secrets/garage_s3_secret_key
+      - APP_URL=https://${DOMAIN:-quiz.example.com}
+    networks:
+      - quiz_public
+      - quiz_internal
+    deploy:
+      mode: replicated
+      replicas: 2
+      labels:
+        - "traefik.enable=true"
+        - "traefik.swarm.network=quiz_public"
+        # Route backend API & Socket.io endpoints (/api, /socket.io, or optional dedicated api subdomain)
+        - "traefik.http.routers.backend.rule=((Host(`${DOMAIN:-quiz.example.com}`) || Host(`localhost`) || Host(`127.0.0.1`)) && (PathPrefix(`/api`) || PathPrefix(`/socket.io`))) || (Host(`${API_SUBDOMAIN:-api.quiz.example.com}`) && !Host(`${DOMAIN:-quiz.example.com}`) && !Host(`localhost`) && !Host(`127.0.0.1`))"
+        - "traefik.http.routers.backend.entrypoints=websecure"
+        - "traefik.http.routers.backend.priority=30"
+        - "traefik.http.routers.backend.tls=true"
+        - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.backend.middlewares=security-headers@file,rate-limit-general@file"
+        - "traefik.http.services.backend.loadbalancer.server.port=4000"
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1024M
+        reservations:
+          cpus: '0.2'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:4000/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ----------------------------------------------------------------------------
+  # 5. Persistent Relational Database (PostgreSQL)
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    secrets:
+      - db_user
+      - db_password
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-quiz_db}
+      - POSTGRES_USER_FILE=/run/secrets/db_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - quiz_internal
+    # No ports exposed to host or public network
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1024M
+        reservations:
+          cpus: '0.2'
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$(cat /run/secrets/db_user) -d ${POSTGRES_DB:-quiz_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ----------------------------------------------------------------------------
+  # 6. In-Memory State & Pub/Sub Store (Redis)
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7.2-alpine
+    secrets:
+      - redis_password
+    command: >
+      sh -c '
+        exec redis-server
+        --requirepass "$$(cat /run/secrets/redis_password)"
+        --appendonly yes
+        --maxmemory 512mb
+        --maxmemory-policy allkeys-lru
+      '
+    volumes:
+      - redis_data:/data
+    networks:
+      - quiz_internal
+    # No ports exposed to host or public network
+    deploy:
+      mode: replicated
+      replicas: 1
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 768M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+      restart_policy:
+        condition: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$(cat /run/secrets/redis_password) ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # ----------------------------------------------------------------------------
+  # 7. S3-Compatible Object Storage (Garage S3 - ~25MB RAM Footprint)
+  # ----------------------------------------------------------------------------
+  garage:
+    image: dxflrs/garage:v2.4.1
+    command: /garage server --single-node --default-bucket
+    secrets:
+      - garage_rpc_secret
+      - garage_admin_token
+    environment:
+      - GARAGE_DEFAULT_BUCKET=media
+      - GARAGE_DEFAULT_ACCESS_KEY=${GARAGE_S3_KEY_ID:-GKopenquizkey01}
+      - GARAGE_DEFAULT_SECRET_KEY=${GARAGE_S3_SECRET_KEY:-default_dev_secret_key_2026!}
+    volumes:
+      - ./garage/garage.toml:/etc/garage.toml:ro
+      - garage_meta:/var/lib/garage/meta
+      - garage_data:/var/lib/garage/data
+    networks:
+      - quiz_internal
+      - quiz_public
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.swarm.network=quiz_public"
+        # Route public /media requests directly to Garage S3 Web on port 3902
+        - "traefik.http.routers.garage.rule=(Host(`${DOMAIN:-quiz.example.com}`) || Host(`localhost`) || Host(`127.0.0.1`)) && PathPrefix(`/media`)"
+        - "traefik.http.routers.garage.entrypoints=websecure"
+        - "traefik.http.routers.garage.priority=25"
+        - "traefik.http.routers.garage.tls=true"
+        - "traefik.http.routers.garage.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.garage.middlewares=garage-strip,garage-host,security-headers@file,compress@file"
+        - "traefik.http.middlewares.garage-strip.stripprefix.prefixes=/media"
+        - "traefik.http.middlewares.garage-host.headers.customrequestheaders.Host=media"
+        - "traefik.http.services.garage.loadbalancer.server.port=3902"
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
+      restart_policy:
+        condition: on-failure
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # ----------------------------------------------------------------------------
+  # 8. Garage S3 Initialization (Enable public website access on media bucket)
+  # ----------------------------------------------------------------------------
+  garage_init:
+    image: alpine:3.20
+    depends_on:
+      - garage
+    secrets:
+      - garage_admin_token
+    volumes:
+      - ./garage/init-garage.sh:/init-garage.sh:ro
+    networks:
+      - quiz_internal
+    entrypoint: >
+      /bin/sh -c "
+        apk add --no-cache curl jq >/dev/null 2>&1 &&
+        /bin/sh /init-garage.sh
+      "
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+
