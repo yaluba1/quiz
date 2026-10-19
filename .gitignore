@@ -161,7 +161,6 @@ secrets/*
 prompts/
 scripts/
 scratch/
-package-lock.json
 
 # Local Docker overrides
 docker-compose.override.yml
