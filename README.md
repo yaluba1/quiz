@@ -397,19 +397,109 @@ docker service scale quiz_frontend_pupil=3
 ```
 Traefik automatically registers new replicas and balances traffic. Redis synchronizes WebSocket game events across all backend replicas.
 
-### 7. Rebuilding and Updating a Service in Swarm
-When modifying code in a specific service (for example, the Professor Frontend), rebuild its image and force Docker Swarm to replace the running replicas with the newly built `:latest` image:
+### 7. Multi-Node Swarm Deployment (Without Public Registries)
+
+When deploying to a multi-node Swarm cluster (e.g. Raspberry Pi cluster) **without** pushing images to public registries like Docker Hub or GitHub Container Registry (GHCR), keep in mind three critical Swarm mechanics:
+
+#### A. Internal Image Distribution via Local Swarm Registry
+In a multi-node Swarm, worker nodes cannot pull images that only exist on the manager's local Docker daemon. Attempting to deploy `quiz-backend:latest` without a registry prefix will cause worker nodes to query public Docker Hub and fail with `pull access denied`.
+
+To share locally built images across nodes securely and privately:
+1. **Launch a Swarm-wide local registry service**:
+   ```bash
+   docker service create --name registry --publish published=5000,target=5000 registry:2
+   ```
+   > **Note**: Because this service uses the Swarm routing mesh, port 5000 is accessible on `127.0.0.1:5000` from **all** nodes in the cluster. Docker treats `127.0.0.1` as loopback, so no `--insecure-registry` configuration or custom TLS certificates are needed on your nodes.
+
+2. **Build, tag, and push images into the local registry**:
+   ```bash
+   # Build ARM64/local images
+   docker compose build
+
+   # Tag for local registry
+   docker tag quiz-backend:latest 127.0.0.1:5000/quiz-backend:latest
+   docker tag quiz-frontend-professor:latest 127.0.0.1:5000/quiz-frontend-professor:latest
+   docker tag quiz-frontend-pupil:latest 127.0.0.1:5000/quiz-frontend-pupil:latest
+
+   # Push to local registry
+   docker push 127.0.0.1:5000/quiz-backend:latest
+   docker push 127.0.0.1:5000/quiz-frontend-professor:latest
+   docker push 127.0.0.1:5000/quiz-frontend-pupil:latest
+   ```
+
+#### B. Environment Variables & `.env` in `docker stack deploy`
+Unlike `docker compose up`, `docker stack deploy` **does not automatically load `.env` files**. Any variable not exported in your current shell (e.g. `CLOUDFLARE_TUNNEL_TOKEN`) will default to empty, causing services like `cloudflared` to exit with error code 255.
+
+Always export `.env` before deploying:
 ```bash
-# 1. Rebuild the target image (add --no-cache if needed)
-docker compose build frontend_professor
-
-# 2. Force Swarm to recreate the service containers with the new image
-docker service update --force --image quiz-frontend-professor:latest quiz_frontend_professor
-
-# 3. Verify the updated replicas are running
-docker service ps quiz_frontend_professor
+set -a; source .env; set +a
+docker stack deploy -c docker-compose-rpi-CfZeroTrust.yml quiz
 ```
-The same pattern applies to the Pupil Frontend (`frontend_pupil` / `quiz-frontend-pupil:latest` / `quiz_frontend_pupil`) and Backend (`backend` / `quiz-backend:latest` / `quiz_backend`).
+
+#### C. Host Bind Mounts vs. Placement Constraints
+In a multi-node cluster, relative host bind mounts (such as `./traefik/traefik.yml` or `./database/init`) refer to filesystem paths on the *target node* where the container runs, not where the stack command was executed.
+
+If a service uses host bind mounts, ensure it is pinned to the node where the repository files exist:
+- **Traefik**: Pinned with `node.role == manager` AND `node.labels.storage == true` (so it runs on the primary node holding `./traefik` and the Docker socket).
+- **Postgres & Garage**: Pinned with `node.labels.storage == true`.
+
+#### D. Automated Multi-Node Deployment Script
+A helper script is provided at [`scripts/deploy-rpi.sh`](file:///home/juan/repos/quiz/scripts/deploy-rpi.sh) that automates this entire workflow:
+```bash
+# Deploy with existing images
+./scripts/deploy-rpi.sh
+
+# Or rebuild images, push to registry, and deploy
+./scripts/deploy-rpi.sh --build
+```
+This script automatically:
+1. Validates and exports all `.env` variables and secret files.
+2. Ensures the encrypted Swarm overlay networks exist.
+3. Creates and waits for the local Swarm `registry:2` service if not running.
+4. Builds, tags, and pushes `127.0.0.1:5000/*` images.
+5. Deploys the stack with `docker stack deploy`.
+
+---
+
+### 8. Rebuilding and Updating Services in Swarm
+
+#### A. Automatic Image Rollout (No Manual Node Cleanup Needed)
+You **do not need to manually delete or clean up old images on worker nodes**. 
+When you rebuild an image on `swarm-1` and push it to the local registry:
+1. The local registry computes a new SHA256 digest for `:latest`.
+2. When [`deploy-rpi.sh`](file:///home/juan/repos/quiz/scripts/deploy-rpi.sh) runs `docker stack deploy`, Swarm automatically resolves the new image digest (`--resolve-image always`).
+3. Swarm automatically triggers a **rolling update** across all nodes (`swarm-2`, `swarm-3`, `swarm-4`, `swarm-5`). Worker nodes download only the newly changed layers and replace old containers with zero downtime.
+
+#### B. Full Cluster Rebuild & Redeploy
+To rebuild all three custom images (`quiz-backend`, `quiz-frontend-professor`, `quiz-frontend-pupil`), push to the local registry, and trigger a cluster-wide rolling update in one step:
+```bash
+./scripts/deploy-rpi.sh --build
+```
+
+#### C. Updating a Single Service Rapidly
+If you only changed code in one service (e.g. `quiz-frontend-pupil`), you can update just that service without touching the rest of the stack:
+```bash
+# 1. Rebuild only that service's image
+docker compose build frontend_pupil
+
+# 2. Tag and push to the local registry
+docker tag quiz-frontend-pupil:latest 127.0.0.1:5000/quiz-frontend-pupil:latest
+docker push 127.0.0.1:5000/quiz-frontend-pupil:latest
+
+# 3. Tell Swarm to pull the new digest and perform a rolling update
+docker service update --image 127.0.0.1:5000/quiz-frontend-pupil:latest quiz_frontend_pupil
+
+# 4. Verify the updated replicas are running
+docker service ps quiz_frontend_pupil
+```
+*(The same steps apply to `quiz-frontend-professor` / `quiz_frontend_professor` and `quiz-backend` / `quiz_backend`)*.
+
+#### D. SD Card Storage Housekeeping
+While old images will never interfere with running services, Docker caches older unreferenced layers on each node's SD card / drive. If you rebuild frequently and want to reclaim disk space across your nodes:
+```bash
+# On any manager or worker node:
+docker image prune -f
+```
 
 ---
 

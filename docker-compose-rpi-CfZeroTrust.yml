@@ -23,8 +23,14 @@
 # Usage:
 #   1. Set CLOUDFLARE_TUNNEL_TOKEN and DOMAIN in .env
 #   2. Ensure secrets exist in ./secrets/
-#   3. Build ARM64 images: docker compose build
-#   4. Deploy stack: docker stack deploy -c docker-compose-rpi-CfZeroTrust.yml quiz
+#   3. Deploy or run scripts/deploy-rpi.sh (handles building, pushing to local swarm registry, and deploying with .env exported)
+#      Or manually:
+#        docker service create --name registry --publish published=5000,target=5000 registry:2 (if not running)
+#        docker compose build
+#        docker tag quiz-backend:latest 127.0.0.1:5000/quiz-backend:latest && docker push 127.0.0.1:5000/quiz-backend:latest
+#        docker tag quiz-frontend-professor:latest 127.0.0.1:5000/quiz-frontend-professor:latest && docker push 127.0.0.1:5000/quiz-frontend-professor:latest
+#        docker tag quiz-frontend-pupil:latest 127.0.0.1:5000/quiz-frontend-pupil:latest && docker push 127.0.0.1:5000/quiz-frontend-pupil:latest
+#        set -a; source .env; set +a; docker stack deploy -c docker-compose-rpi-CfZeroTrust.yml quiz
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -123,6 +129,7 @@ services:
       placement:
         constraints:
           - node.role == manager
+          - node.labels.storage == true
       resources:
         limits:
           cpus: '1.0'
@@ -174,7 +181,7 @@ services:
   # Unconstrained tier: schedules across RPi 3 workers and RPi 4 nodes.
   # ----------------------------------------------------------------------------
   frontend_pupil:
-    image: quiz-frontend-pupil:latest
+    image: ${REGISTRY_PREFIX:-127.0.0.1:5000/}quiz-frontend-pupil:latest
     build:
       context: ./frontends/pupil
       dockerfile: Dockerfile
@@ -215,7 +222,7 @@ services:
   # Pinned to RPi 4 (tier == heavy) for fast SSR and dashboard compilation.
   # ----------------------------------------------------------------------------
   frontend_professor:
-    image: quiz-frontend-professor:latest
+    image: ${REGISTRY_PREFIX:-127.0.0.1:5000/}quiz-frontend-professor:latest
     build:
       context: ./frontends/professor
       dockerfile: Dockerfile
@@ -259,7 +266,7 @@ services:
   # Pinned to RPi 4 (tier == heavy) for high CPU burst scoring & low latency.
   # ----------------------------------------------------------------------------
   backend:
-    image: quiz-backend:latest
+    image: ${REGISTRY_PREFIX:-127.0.0.1:5000/}quiz-backend:latest
     build:
       context: ./backend
       dockerfile: Dockerfile
