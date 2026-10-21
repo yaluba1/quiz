@@ -4,8 +4,11 @@
 # Usage:
 #   1. Copy .env.example to .env and configure domain/email.
 #   2. Populate secret files in ./secrets/ (chmod 600)
-#   3. Build local images: docker compose build
-#   4. Deploy stack: docker stack deploy -c docker-compose.yml quiz
+#   3. Create external overlay networks:
+#        docker network create --driver overlay --attachable quiz_public
+#        docker network create --driver overlay --attachable --opt encrypted quiz_internal
+#   4. Build local images: docker compose build
+#   5. Deploy stack: docker stack deploy -c docker-compose.yml quiz
 # ==============================================================================
 
 # ------------------------------------------------------------------------------

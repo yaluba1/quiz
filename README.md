@@ -371,25 +371,42 @@ cp .env.example .env
 # Edit .env with your domain names and Let's Encrypt email
 ```
 
-### 3. Build Container Images
+### 3. Create Swarm Overlay Networks
+Both compose files define external overlay networks to enforce strict tier isolation and allow Traefik routing without risking network tear-down during stack updates. Run this once on a Swarm manager node:
+```bash
+# Ingress network: connects Traefik, Cloudflare tunnel, and exposed web/API services
+docker network create --driver overlay --attachable quiz_public
+
+# Back-tier network: isolated and encrypted data-plane between Swarm nodes
+docker network create --driver overlay --attachable --opt encrypted quiz_internal
+```
+
+### 4. Build Container Images
 Build the application container images locally (or in your CI/CD pipeline):
 ```bash
 docker compose build
 ```
 
-### 4. Deploy the Stack to Swarm
-Deploy the stack using the defined compose file:
+### 5. Deploy the Stack to Swarm
+Deploy the stack using your chosen compose file:
+
+**Standard Swarm deployment:**
 ```bash
 docker stack deploy -c docker-compose.yml quiz
 ```
 
-### 5. Verify Running Services
+**Raspberry Pi Cluster + Cloudflare Zero Trust deployment:**
+```bash
+docker stack deploy -c docker-compose-rpi-CfZeroTrust.yml quiz
+```
+
+### 6. Verify Running Services
 ```bash
 docker stack services quiz
 docker service ls
 ```
 
-### 6. Scaling Services
+### 7. Scaling Services
 Scale backend or frontend services dynamically across nodes:
 ```bash
 docker service scale quiz_backend=4
@@ -397,7 +414,7 @@ docker service scale quiz_frontend_pupil=3
 ```
 Traefik automatically registers new replicas and balances traffic. Redis synchronizes WebSocket game events across all backend replicas.
 
-### 7. Rebuilding and Updating a Service in Swarm
+### 8. Rebuilding and Updating a Service in Swarm
 When modifying code in a specific service (for example, the Professor Frontend), rebuild its image and force Docker Swarm to replace the running replicas with the newly built `:latest` image:
 ```bash
 # 1. Rebuild the target image (add --no-cache if needed)

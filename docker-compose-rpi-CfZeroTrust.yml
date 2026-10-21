@@ -23,8 +23,11 @@
 # Usage:
 #   1. Set CLOUDFLARE_TUNNEL_TOKEN and DOMAIN in .env
 #   2. Ensure secrets exist in ./secrets/
-#   3. Build ARM64 images: docker compose build
-#   4. Deploy stack: docker stack deploy -c docker-compose-rpi-CfZeroTrust.yml quiz
+#   3. Create external overlay networks (run on Swarm Manager):
+#        docker network create --driver overlay --attachable quiz_public
+#        docker network create --driver overlay --attachable --opt encrypted quiz_internal
+#   4. Build ARM64 images: docker compose build
+#   5. Deploy stack: docker stack deploy -c docker-compose-rpi-CfZeroTrust.yml quiz
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
