@@ -159,7 +159,8 @@ secrets/*
 
 # Internal development artifacts & scratch code
 prompts/
-scripts/
+scripts/*
+!scripts/deploy-rpi.sh
 scratch/
 
 # Local Docker overrides
