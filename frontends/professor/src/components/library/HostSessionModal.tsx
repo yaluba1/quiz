@@ -23,14 +23,8 @@ export function HostSessionModal({ quiz, isOpen, onClose, onLaunch }: HostSessio
 
   const [sessionTitle, setSessionTitle] = useState('');
   const [classGroup, setClassGroup] = useState('');
-  const [durationMinutes, setDurationMinutes] = useState(60);
+  const [durationMinutes, setDurationMinutes] = useState<number | ''>(60);
   const [executionMode, setExecutionMode] = useState<'MANUAL' | 'AUTOMATIC'>('MANUAL');
-
-  React.useEffect(() => {
-    if (quiz?.defaultExecutionMode) {
-      setExecutionMode(quiz.defaultExecutionMode);
-    }
-  }, [quiz]);
 
   if (!isOpen || !quiz) return null;
 
@@ -118,7 +112,17 @@ export function HostSessionModal({ quiz, isOpen, onClose, onLaunch }: HostSessio
               min={5}
               max={240}
               value={durationMinutes}
-              onChange={(e) => setDurationMinutes(Number(e.target.value))}
+              onChange={(e) => {
+                const val = e.target.value;
+                setDurationMinutes(val === '' ? '' : Number(val));
+              }}
+              onBlur={() => {
+                if (durationMinutes === '' || durationMinutes < 5) {
+                  setDurationMinutes(60);
+                } else if (durationMinutes > 240) {
+                  setDurationMinutes(240);
+                }
+              }}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition"
               data-testid="duration-input"
             />

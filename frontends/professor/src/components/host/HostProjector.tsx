@@ -141,7 +141,7 @@ export function HostProjector({
           question={currentQuestion}
           answeredCount={answerStats.answeredCount}
           totalPlayers={answerStats.totalPlayers}
-          onTimeUp={showResults}
+          onTimeUp={executionMode === 'AUTOMATIC' ? undefined : showResults}
         />
         {/* Professor Control / Mode Indicator Bar */}
         <div className="fixed bottom-4 right-4 z-40 flex items-center gap-2">

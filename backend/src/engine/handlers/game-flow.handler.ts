@@ -97,7 +97,7 @@ export function registerGameFlowHandlers(io: Server, socket: Socket): void {
       }, 3000);
       roomQuestionTimers.set(pin, nextTimer);
     } else {
-      // Last question finished in AUTOMATIC mode -> Podium & flush
+      // Last question finished in AUTOMATIC mode -> Podium
       await RoomStateManager.updateRoomMeta(pin, { status: 'PODIUM' });
       const allRankings = await RoomStateManager.getAllRankings(pin);
 
@@ -112,22 +112,55 @@ export function registerGameFlowHandlers(io: Server, socket: Socket): void {
         podium,
         totalPlayers: allRankings.length,
       });
-
-      const db = getDb();
-      const questions = await db
-        .select({ id: schema.questions.id })
-        .from(schema.questions)
-        .where(eq(schema.questions.quizId, meta.quizId))
-        .orderBy(schema.questions.orderIndex);
-
-      const qIds = questions.map((q) => q.id);
-      await SessionFlusher.flushSessionToDatabase(pin, 'FINISHED', qIds);
-
-      io.to(pin).emit('game:ended', {
-        pin,
-        status: 'FINISHED',
-      });
     }
+  }
+
+  // Helper to pause question and show host/pupil results (Manual mode or early answer completion)
+  async function showQuestionResults(pin: string) {
+    clearRoomQuestionTimer(pin);
+
+    const meta = await RoomStateManager.getRoomMeta(pin);
+    if (!meta || meta.status !== 'QUESTION_ACTIVE') return;
+
+    await RoomStateManager.updateRoomMeta(pin, { status: 'QUESTION_RESULT' });
+
+    const qData = await loadQuestionWithOpts(meta.quizId, meta.currentQuestionIndex);
+    if (!qData) return;
+
+    const { question, options } = qData;
+    const correctOption = options.find((o) => o.isCorrect);
+
+    // Finalize unsubmitted answers as empty
+    await finalizeEmptyAnswers(pin, question.id);
+
+    const answersRecorded = await RoomStateManager.getAnswersForQuestion(pin, question.id);
+    const allPlayers = await RoomStateManager.getAllPlayers(pin);
+
+    // Compute distribution including empty answers
+    const distribution: Record<string, number> = {};
+    for (const opt of options) {
+      distribution[opt.id] = 0;
+    }
+    distribution['__EMPTY__'] = 0;
+
+    let emptyCount = 0;
+    for (const ans of Object.values(answersRecorded)) {
+      if (!ans.optionId || ans.isEmpty || ans.optionId === '__EMPTY__') {
+        emptyCount++;
+      } else if (distribution[ans.optionId] !== undefined) {
+        distribution[ans.optionId]++;
+      }
+    }
+    distribution['__EMPTY__'] = emptyCount;
+
+    io.to(pin).emit('question:result_host', {
+      questionId: question.id,
+      correctOptionId: correctOption?.id,
+      distribution,
+      answeredCount: Object.keys(answersRecorded).length,
+      emptyCount,
+      totalPlayers: allPlayers.length,
+    });
   }
 
   // Helper to launch question active state
@@ -173,7 +206,8 @@ export function registerGameFlowHandlers(io: Server, socket: Socket): void {
       })),
     });
 
-    // If AUTOMATIC mode, schedule auto-advance when time limit expires
+    // If AUTOMATIC mode, advance to next question when time limit expires
+    // If MANUAL mode, pause and show question results when time limit expires
     if (meta.executionMode === 'AUTOMATIC') {
       const autoTimer = setTimeout(async () => {
         try {
@@ -181,8 +215,17 @@ export function registerGameFlowHandlers(io: Server, socket: Socket): void {
         } catch (err) {
           console.error(`[AutoAdvance Error for pin ${pin}]:`, err);
         }
-      }, timeLimitMs + 500);
+      }, timeLimitMs);
       roomQuestionTimers.set(pin, autoTimer);
+    } else {
+      const manualTimer = setTimeout(async () => {
+        try {
+          await showQuestionResults(pin);
+        } catch (err) {
+          console.error(`[Manual Pause Error for pin ${pin}]:`, err);
+        }
+      }, timeLimitMs);
+      roomQuestionTimers.set(pin, manualTimer);
     }
   }
 
@@ -326,9 +369,14 @@ export function registerGameFlowHandlers(io: Server, socket: Socket): void {
         });
 
         // In AUTOMATIC mode: if all registered players have answered, advance immediately
-        if (meta.executionMode === 'AUTOMATIC' && totalPlayers > 0 && answeredCount >= totalPlayers) {
+        // In MANUAL mode: if all registered players have answered, pause and show results immediately
+        if (totalPlayers > 0 && answeredCount >= totalPlayers) {
           clearRoomQuestionTimer(pin);
-          await autoAdvanceQuestion(pin, meta.currentQuestionIndex);
+          if (meta.executionMode === 'AUTOMATIC') {
+            await autoAdvanceQuestion(pin, meta.currentQuestionIndex);
+          } else {
+            await showQuestionResults(pin);
+          }
         }
       } catch (err: any) {
         socket.emit('room:error', { code: 'SUBMIT_FAILED', message: err.message });
@@ -340,50 +388,7 @@ export function registerGameFlowHandlers(io: Server, socket: Socket): void {
   socket.on('question:show_result', async (payload: { pin: string }) => {
     try {
       const { pin } = payload;
-      clearRoomQuestionTimer(pin);
-
-      const meta = await RoomStateManager.getRoomMeta(pin);
-      if (!meta) return;
-
-      await RoomStateManager.updateRoomMeta(pin, { status: 'QUESTION_RESULT' });
-
-      const qData = await loadQuestionWithOpts(meta.quizId, meta.currentQuestionIndex);
-      if (!qData) return;
-
-      const { question, options } = qData;
-      const correctOption = options.find((o) => o.isCorrect);
-
-      // Finalize unsubmitted answers as empty
-      await finalizeEmptyAnswers(pin, question.id);
-
-      const answersRecorded = await RoomStateManager.getAnswersForQuestion(pin, question.id);
-      const allPlayers = await RoomStateManager.getAllPlayers(pin);
-
-      // Compute distribution including empty answers
-      const distribution: Record<string, number> = {};
-      for (const opt of options) {
-        distribution[opt.id] = 0;
-      }
-      distribution['__EMPTY__'] = 0;
-
-      let emptyCount = 0;
-      for (const ans of Object.values(answersRecorded)) {
-        if (!ans.optionId || ans.isEmpty || ans.optionId === '__EMPTY__') {
-          emptyCount++;
-        } else if (distribution[ans.optionId] !== undefined) {
-          distribution[ans.optionId]++;
-        }
-      }
-      distribution['__EMPTY__'] = emptyCount;
-
-      io.to(pin).emit('question:result_host', {
-        questionId: question.id,
-        correctOptionId: correctOption?.id,
-        distribution,
-        answeredCount: Object.keys(answersRecorded).length,
-        emptyCount,
-        totalPlayers: allPlayers.length,
-      });
+      await showQuestionResults(pin);
     } catch (err: any) {
       socket.emit('room:error', { code: 'RESULT_FAILED', message: err.message });
     }

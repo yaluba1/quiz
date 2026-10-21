@@ -35,7 +35,6 @@ export function QuizStudio({ initialQuizId, isNew = false }: QuizStudioProps) {
     tags: [],
     themeId: null,
     defaultQuestionTimeLimitSeconds: 20,
-    defaultExecutionMode: 'MANUAL',
   });
 
   const [questions, setQuestions] = useState<Question[]>([
@@ -82,7 +81,6 @@ export function QuizStudio({ initialQuizId, isNew = false }: QuizStudioProps) {
           const res = await apiClient.request<{ quiz: Quiz; questions: any[] }>(`/quizzes/${initialQuizId}`);
           setQuiz({
             defaultQuestionTimeLimitSeconds: 20,
-            defaultExecutionMode: 'MANUAL',
             ...res.quiz,
           });
           if (res.questions && res.questions.length > 0) {
@@ -192,7 +190,6 @@ export function QuizStudio({ initialQuizId, isNew = false }: QuizStudioProps) {
           body: JSON.stringify({
             ...quiz,
             defaultQuestionTimeLimitSeconds: quiz.defaultQuestionTimeLimitSeconds ?? 20,
-            defaultExecutionMode: quiz.defaultExecutionMode || 'MANUAL',
             professorId: user.id,
           }),
         });
@@ -215,7 +212,6 @@ export function QuizStudio({ initialQuizId, isNew = false }: QuizStudioProps) {
           body: JSON.stringify({
             ...quiz,
             defaultQuestionTimeLimitSeconds: quiz.defaultQuestionTimeLimitSeconds ?? 20,
-            defaultExecutionMode: quiz.defaultExecutionMode || 'MANUAL',
             professorId: user.id,
           }),
         });

@@ -172,21 +172,6 @@ export function QuizMetadataForm({ quiz, themes, onChange, onApplyTimeToAllQuest
           </div>
         </div>
 
-        {/* Default Execution Mode */}
-        <div>
-          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-            {t('studio.executionMode') || 'Execution Mode'}
-          </label>
-          <select
-            value={quiz.defaultExecutionMode || 'MANUAL'}
-            onChange={(e) => onChange({ ...quiz, defaultExecutionMode: e.target.value as 'MANUAL' | 'AUTOMATIC' })}
-            className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition"
-            data-testid="quiz-execution-mode-select"
-          >
-            <option value="MANUAL">{t('studio.manualMode') || 'Manual (Host controls progression)'}</option>
-            <option value="AUTOMATIC">{t('studio.automaticMode') || 'Automatic (System advances automatically)'}</option>
-          </select>
-        </div>
 
         {/* Tags */}
         <div className="md:col-span-2">

@@ -56,7 +56,7 @@ export function registerLobbyHandlers(io: Server, socket: Socket): void {
         const now = new Date();
         const expiresAt = new Date(now.getTime() + durationMinutes * 60 * 1000);
         const resolvedExecutionMode: 'MANUAL' | 'AUTOMATIC' =
-          executionMode || (quiz.defaultExecutionMode as 'MANUAL' | 'AUTOMATIC') || 'MANUAL';
+          executionMode === 'AUTOMATIC' ? 'AUTOMATIC' : 'MANUAL';
 
         // Fetch theme if assigned
         let themeMeta = null;

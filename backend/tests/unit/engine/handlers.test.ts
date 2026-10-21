@@ -630,6 +630,187 @@ describe('Game Handlers & Flusher Comprehensive Branch Tests', () => {
         })
       );
     });
+
+    it('in MANUAL mode: automatically pauses and reveals results when all players have answered', async () => {
+      const pupil = createMockSocket('p-manual-1');
+      registerGameFlowHandlers(pupil.io, pupil.socket);
+
+      const pin = '999111';
+      const quizId = 'quiz-manual';
+      const questionId = 'q-manual-1';
+
+      await RoomStateManager.setRoomMeta(pin, {
+        sessionId: 'sess-manual',
+        professorId: 'prof-1',
+        quizId,
+        pin,
+        status: 'QUESTION_ACTIVE',
+        executionMode: 'MANUAL',
+        currentQuestionIndex: 0,
+        totalQuestions: 2,
+        questionStartTimeMs: Date.now(),
+        questionTimeLimitMs: 20000,
+        questionBasePoints: 1000,
+        expiresAt: new Date(Date.now() + 60000).toISOString(),
+      });
+
+      await RoomStateManager.addPlayer(pin, {
+        id: 'p-manual-1',
+        nickname: 'Alice',
+        socketId: 's-1',
+        connected: true,
+        joinedAt: Date.now(),
+      });
+
+      const mockDb: any = {
+        select: vi.fn().mockReturnThis(),
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+      };
+
+      let callCount = 0;
+      mockDb.orderBy = vi.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            limit: vi.fn().mockReturnValue({
+              offset: vi.fn().mockReturnValue([
+                {
+                  id: questionId,
+                  quizId,
+                  orderIndex: 0,
+                  questionText: 'Test?',
+                  questionType: 'MULTIPLE_CHOICE',
+                  timeLimitSeconds: 20,
+                  pointsMultiplier: '1.00',
+                },
+              ]),
+            }),
+          };
+        }
+        return [
+          { id: 'opt-1', questionId, orderIndex: 0, optionText: 'Opt 1', isCorrect: true },
+        ];
+      });
+
+      mockDb.where = vi.fn().mockReturnValue({
+        limit: vi.fn().mockResolvedValue([{ id: 'opt-1', isCorrect: true }]),
+        orderBy: mockDb.orderBy,
+      });
+
+      vi.spyOn(dbModule, 'getDb').mockReturnValue(mockDb);
+
+      await pupil.handlers['question:submit_answer']({
+        pin,
+        questionId,
+        optionId: 'opt-1',
+      });
+
+      // All players (1/1) answered in MANUAL mode -> room status should be QUESTION_RESULT automatically
+      const meta = await RoomStateManager.getRoomMeta(pin);
+      expect(meta?.status).toBe('QUESTION_RESULT');
+      expect(pupil.io.to(pin).emit).toHaveBeenCalledWith(
+        'question:result_host',
+        expect.objectContaining({
+          questionId,
+          answeredCount: 1,
+          totalPlayers: 1,
+        })
+      );
+    });
+
+    it('in AUTOMATIC mode: reaches PODIUM on last question without prematurely emitting game:ended', async () => {
+      const pupil = createMockSocket('p-auto-1');
+      registerGameFlowHandlers(pupil.io, pupil.socket);
+
+      const pin = '999222';
+      const quizId = 'quiz-auto-podium';
+      const questionId = 'q-auto-last';
+
+      await RoomStateManager.setRoomMeta(pin, {
+        sessionId: 'sess-auto-podium',
+        professorId: 'prof-1',
+        quizId,
+        pin,
+        status: 'QUESTION_ACTIVE',
+        executionMode: 'AUTOMATIC',
+        currentQuestionIndex: 0,
+        totalQuestions: 1, // Only 1 question, so finishing it reaches PODIUM!
+        questionStartTimeMs: Date.now(),
+        questionTimeLimitMs: 20000,
+        questionBasePoints: 1000,
+        expiresAt: new Date(Date.now() + 60000).toISOString(),
+      });
+
+      await RoomStateManager.addPlayer(pin, {
+        id: 'p-auto-1',
+        nickname: 'Alice',
+        socketId: 's-1',
+        connected: true,
+        joinedAt: Date.now(),
+      });
+
+      const mockDb: any = {
+        select: vi.fn().mockReturnThis(),
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+      };
+
+      let callCount = 0;
+      mockDb.orderBy = vi.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            limit: vi.fn().mockReturnValue({
+              offset: vi.fn().mockReturnValue([
+                {
+                  id: questionId,
+                  quizId,
+                  orderIndex: 0,
+                  questionText: 'Test?',
+                  questionType: 'MULTIPLE_CHOICE',
+                  timeLimitSeconds: 20,
+                  pointsMultiplier: '1.00',
+                },
+              ]),
+            }),
+          };
+        }
+        return [
+          { id: 'opt-1', questionId, orderIndex: 0, optionText: 'Opt 1', isCorrect: true },
+        ];
+      });
+
+      mockDb.where = vi.fn().mockReturnValue({
+        limit: vi.fn().mockResolvedValue([{ id: 'opt-1', isCorrect: true }]),
+        orderBy: mockDb.orderBy,
+      });
+
+      vi.spyOn(dbModule, 'getDb').mockReturnValue(mockDb);
+
+      await pupil.handlers['question:submit_answer']({
+        pin,
+        questionId,
+        optionId: 'opt-1',
+      });
+
+      // In AUTOMATIC mode when last question completes:
+      // Status must be PODIUM, game:podium emitted, but NOT game:ended!
+      const meta = await RoomStateManager.getRoomMeta(pin);
+      expect(meta?.status).toBe('PODIUM');
+      expect(pupil.io.to(pin).emit).toHaveBeenCalledWith(
+        'game:podium',
+        expect.objectContaining({
+          podium: expect.any(Array),
+          totalPlayers: 1,
+        })
+      );
+      expect(pupil.io.to(pin).emit).not.toHaveBeenCalledWith('game:ended', expect.anything());
+    });
   });
 });
 

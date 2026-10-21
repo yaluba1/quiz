@@ -115,6 +115,8 @@ describe('Library Sub-components Tests', () => {
 
     fireEvent.change(titleInput, { target: { value: 'Class 4B Exam' } });
     fireEvent.change(classInput, { target: { value: '4B' } });
+    fireEvent.change(durInput, { target: { value: '' } });
+    expect(durInput).toHaveValue(null);
     fireEvent.change(durInput, { target: { value: '45' } });
 
     fireEvent.click(screen.getByTestId('launch-session-button'));

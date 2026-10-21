@@ -574,7 +574,7 @@ export async function quizzesRoutes(app: FastifyInstance): Promise<void> {
       const durationMinutes = body.durationMinutes || quiz.session_duration_minutes || 60;
       const now = new Date();
       const expiresAt = new Date(now.getTime() + durationMinutes * 60 * 1000);
-      const executionMode = body.executionMode || quiz.defaultExecutionMode || 'MANUAL';
+      const executionMode = body.executionMode === 'AUTOMATIC' ? 'AUTOMATIC' : 'MANUAL';
 
       // Allocate unique 6-digit PIN
       const pin = await allocateUniquePin();

@@ -112,10 +112,6 @@ describe('Studio Sub-components Tests', () => {
     const timeLimitSelect = screen.getByTestId('quiz-default-time-limit-select');
     fireEvent.change(timeLimitSelect, { target: { value: '30' } });
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ defaultQuestionTimeLimitSeconds: 30 }));
-
-    const modeSelect = screen.getByTestId('quiz-execution-mode-select');
-    fireEvent.change(modeSelect, { target: { value: 'AUTOMATIC' } });
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ defaultExecutionMode: 'AUTOMATIC' }));
   });
 
   it('handles apply time to all questions in QuizMetadataForm', () => {
